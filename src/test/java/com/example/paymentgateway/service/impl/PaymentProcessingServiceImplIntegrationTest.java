@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -36,7 +38,7 @@ public class PaymentProcessingServiceImplIntegrationTest {
 
     @Test
     public void testProcessPaymentSuccess() {
-        PaymentRequest request = new PaymentRequest("4111111111111112", "12", "2025", "123", 100.50, "USD");
+        PaymentRequest request = new PaymentRequest("4111111111111112", "12", "2025", "123", 100.50, "USD", UUID.randomUUID().toString());
         when(bankSimulator.processTransaction(any(PaymentRequest.class))).thenReturn(true);
         var response = paymentProcessingService.processPayment(request);
 
@@ -44,8 +46,26 @@ public class PaymentProcessingServiceImplIntegrationTest {
     }
 
     @Test
+    public void testProcessPayment_IdempotencyValidation() {
+        var idempotencyKey = UUID.randomUUID().toString();
+        PaymentRequest request = new PaymentRequest("4111111111111112", "12", "2025", "123", 100.50, "USD", idempotencyKey);
+        when(bankSimulator.processTransaction(any(PaymentRequest.class))).thenReturn(true);
+
+        // First payment processing with the idempotency key
+        var response1 = paymentProcessingService.processPayment(request);
+        assertEquals("SUCCESS", response1.getStatus());
+
+        // Second payment processing with the same idempotency key
+        var response2 = paymentProcessingService.processPayment(request);
+        assertEquals("SUCCESS", response2.getStatus());
+
+        // Ensure both responses are the same, indicating the payment wasn't processed twice
+        assertEquals(response1.getPaymentId(), response2.getPaymentId());
+    }
+
+    @Test
     public void testProcessPaymentFailure() {
-        PaymentRequest request = new PaymentRequest("4111111111111111", "12", "2025", "123", 100.50, "USD");
+        PaymentRequest request = new PaymentRequest("4111111111111111", "12", "2025", "123", 100.50, "USD", UUID.randomUUID().toString());
         when(bankSimulator.processTransaction(any(PaymentRequest.class))).thenReturn(false);
         var response = paymentProcessingService.processPayment(request);
 
@@ -54,7 +74,7 @@ public class PaymentProcessingServiceImplIntegrationTest {
 
     @Test
     public void testRetrievePaymentDetails_Success() {
-        var payment = Payment.builder().status("SUCCESS").amount(100.0).cardNumber("4111111111111112").currency("USD").expiryMonth("12").expiryYear("23").build();
+        var payment = Payment.builder().status("SUCCESS").amount(100.0).cardNumber("4111111111111112").currency("USD").expiryMonth("12").expiryYear("23").idempotencyKey(UUID.randomUUID().toString()).build();
         payment = paymentRepository.save(payment);
         var result = paymentProcessingService.retrievePaymentDetails(payment.getId().toString());
         assertNotNull(result);

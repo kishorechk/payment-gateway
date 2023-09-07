@@ -25,4 +25,6 @@ public class Payment {
     private Double amount;
     private String currency;
     private String status;
+    @Column(unique = true)  // This ensures that the idempotency key is unique across all payments
+    private String idempotencyKey;
 }

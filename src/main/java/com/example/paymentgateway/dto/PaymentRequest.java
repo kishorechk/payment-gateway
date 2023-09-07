@@ -35,4 +35,7 @@ public class PaymentRequest {
 
     @NotBlank(message = "Currency is required.")
     private String currency;
+
+    @NotBlank(message = "Idempotency Key is required.")
+    private String idempotencyKey;
 }

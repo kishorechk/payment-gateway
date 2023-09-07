@@ -8,6 +8,7 @@ import com.example.paymentgateway.persistence.PaymentRepository;
 import com.example.paymentgateway.service.PaymentProcessingService;
 import com.example.paymentgateway.simulator.BankSimulator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentProcessingServiceImpl implements PaymentProcessingService {
 
     private final BankSimulator bankSimulator;
@@ -22,6 +24,15 @@ public class PaymentProcessingServiceImpl implements PaymentProcessingService {
 
     @Override
     public PaymentResponse processPayment(PaymentRequest paymentRequest) {
+        // Check if a payment with the given idempotency key already exists
+        log.info("Payment request with idempotency key {}", paymentRequest.getIdempotencyKey());
+        Optional<Payment> existingPayment = paymentRepository.findByIdempotencyKey(paymentRequest.getIdempotencyKey());
+        if (existingPayment.isPresent()) {
+            // Return the details of the existing payment
+            return new PaymentResponse(existingPayment.get().getId().toString(), existingPayment.get().getStatus(), "");
+        }
+
+        // If not, process the payment
         boolean isSuccessful = bankSimulator.processTransaction(paymentRequest);
 
         Payment payment = new Payment();
@@ -31,7 +42,7 @@ public class PaymentProcessingServiceImpl implements PaymentProcessingService {
         payment.setAmount(paymentRequest.getAmount());
         payment.setCurrency(paymentRequest.getCurrency());
         payment.setStatus(isSuccessful ? "SUCCESS" : "FAILURE");
-
+        payment.setIdempotencyKey(paymentRequest.getIdempotencyKey());
         paymentRepository.save(payment);
 
         if (isSuccessful) {
